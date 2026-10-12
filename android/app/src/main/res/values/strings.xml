@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">Einkaufsliste</string>
+    <string name="widget_description">Deine Einkaufsliste mit Mikrofon-Knopf</string>
+    <string name="widget_empty">Alles erledigt. Tipp aufs Mikrofon für neue Einträge.</string>
+    <string name="mic">Sprechen</string>
+</resources>

@@ -159,9 +159,12 @@ ul{list-style:none;margin:0;padding:0;background:var(--surface);border:1px solid
   const catOf = t => (MATCH.find(([, r]) => r.test(t)) || ["Sonstiges"])[0];
   const DEFAULT_ORDER = CATS.map(c => c[0]).concat("Sonstiges");
   const LS_ORDER = "einkaufsliste.reihenfolge";
+  // In der Android-App speichert die App selbst (damit das Widget mitliest), sonst der Browser
+  const NATIVE = window.Android && typeof window.Android.load === "function" ? window.Android : null;
+  const orderSave = () => { try { NATIVE ? NATIVE.saveOrder(JSON.stringify(ORDER)) : localStorage.setItem(LS_ORDER, JSON.stringify(ORDER)); } catch {} };
   let ORDER = (() => {
     try {
-      const saved = JSON.parse(localStorage.getItem(LS_ORDER));
+      const saved = JSON.parse(NATIVE ? NATIVE.loadOrder() : localStorage.getItem(LS_ORDER));
       if (Array.isArray(saved)) return saved.filter(c => DEFAULT_ORDER.includes(c)).concat(DEFAULT_ORDER.filter(c => !saved.includes(c)));
     } catch {}
     return DEFAULT_ORDER.slice();
@@ -170,38 +173,30 @@ ul{list-style:none;margin:0;padding:0;background:var(--surface);border:1px solid
 
   // ---------- Speicher (auf diesem Handy) ----------
   let items = [];   // {id, text, cat, done, ts}
-  let db = null;
   const LS = "einkaufsliste.v1";
-  const lsLoad = () => { try { return JSON.parse(localStorage.getItem(LS)) || []; } catch { return []; } };
-  const lsSave = () => { try { localStorage.setItem(LS, JSON.stringify(items)); } catch {} };
+  const lsLoad = () => { try { return JSON.parse(NATIVE ? NATIVE.load() : localStorage.getItem(LS)) || []; } catch { return []; } };
+  const lsSave = () => { try { NATIVE ? NATIVE.save(JSON.stringify(items)) : localStorage.setItem(LS, JSON.stringify(items)); } catch {} };
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
   items = lsLoad();
   $("store").textContent = "Die Liste wird auf diesem Handy gespeichert.";
+  if (NATIVE) orderSave(); // Widget kennt so von Anfang an die Reihenfolge
   render();
+  window.reloadFromNative = () => { items = lsLoad(); render(); };
 
-
-  async function addItems(texts){
+  function addItems(texts){
     const open = new Set(items.filter(i => !i.done).map(i => norm(i.text)));
     const fresh = [], dup = [];
     for (const t of texts) (open.has(norm(t)) ? dup : fresh).push(t), open.add(norm(t));
     const now = Date.now();
     const rows = fresh.map((text, k) => ({ id: uid(), text, cat: catOf(text), done: false, ts: now + k }));
-    if (db) {
-      for (const r of rows) { const { id, ...body } = r; try { await db.collection("items").doc(id).set(body); } catch { toast("Speichern hat nicht geklappt. Bitte nochmal.", true); } }
-    } else { items = items.concat(rows); lsSave(); render(); }
+    items = items.concat(rows); lsSave(); render();
     let msg = rows.length ? `${rows.length} ${rows.length === 1 ? "Eintrag" : "Einträge"} hinzugefügt: ${fresh.join(", ")}` : "";
     if (dup.length) msg += (msg ? ". " : "") + `Schon drauf: ${dup.join(", ")}`;
     toast(msg || "Nichts erkannt. Versuch es nochmal.", !rows.length && !dup.length);
   }
-  async function setDone(it, done){
-    if (db) { try { await db.collection("items").doc(it.id).update({ done }); } catch {} }
-    else { it.done = done; lsSave(); render(); }
-  }
-  async function remove(ids){
-    if (db) { for (const id of ids) { try { await db.collection("items").doc(id).delete(); } catch {} } }
-    else { items = items.filter(i => !ids.includes(i.id)); lsSave(); render(); }
-  }
+  function setDone(it, done){ it.done = done; lsSave(); render(); }
+  function remove(ids){ items = items.filter(i => !ids.includes(i.id)); lsSave(); render(); }
 
   // ---------- Anzeige ----------
   function render(){
@@ -257,7 +252,7 @@ ul{list-style:none;margin:0;padding:0;background:var(--surface);border:1px solid
   }
   function moveCat(i, d){
     [ORDER[i], ORDER[i + d]] = [ORDER[i + d], ORDER[i]];
-    try { localStorage.setItem(LS_ORDER, JSON.stringify(ORDER)); } catch {}
+    orderSave();
     renderOrder(); render();
   }
   $("orderBtn").addEventListener("click", () => {
@@ -269,7 +264,12 @@ ul{list-style:none;margin:0;padding:0;background:var(--surface);border:1px solid
 
   // Direkte Spracherkennung (Web Speech API), wenn der Browser sie erlaubt
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (SR) {
+  if (NATIVE) {
+    // Android-App: Spracherkennung von Android selbst
+    $("mic").hidden = false;
+    $("mic").addEventListener("click", () => NATIVE.listen());
+    window.onSpoken = text => addItems(parse(text));
+  } else if (SR) {
     const mic = $("mic"); mic.hidden = false;
     let rec = null;
     const listen = () => {
