@@ -59,6 +59,14 @@ ul{list-style:none;margin:0;padding:0;background:var(--surface);border:1px solid
 .ghost{font:700 .92rem var(--display);background:none;border:1.5px solid var(--line);color:var(--ink);border-radius:12px;padding:10px 14px;cursor:pointer}
 .foot{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:20px}
 .foot .note{color:var(--muted);font-size:.85rem}
+.order{margin-top:14px}
+.order p{margin:0 0 8px;color:var(--muted);font-size:.9rem}
+.order li{display:flex;align-items:center;gap:8px;padding:8px 8px 8px 14px;border-top:1px solid var(--line)}
+.order li:first-child{border-top:0}
+.order .pos{font:700 .9rem var(--display);color:var(--muted);width:1.6em;font-variant-numeric:tabular-nums}
+.order .name{flex:1;min-width:0}
+.order button{border:1.5px solid var(--line);background:none;color:var(--ink);border-radius:10px;width:40px;height:40px;font-size:1.1rem;cursor:pointer}
+.order button:disabled{opacity:.3;cursor:default}
 </style>
 </head>
 <body>
@@ -93,7 +101,12 @@ ul{list-style:none;margin:0;padding:0;background:var(--surface);border:1px solid
   <div class="foot">
     <button class="ghost" id="clear" type="button" hidden>Abgehakte entfernen</button>
     <button class="ghost" id="clearYes" type="button" hidden>Ja, entfernen</button>
+    <button class="ghost" id="orderBtn" type="button" aria-expanded="false">Reihenfolge im Laden anpassen</button>
     <span class="note" id="store"></span>
+  </div>
+  <div class="order" id="orderPanel" hidden>
+    <p>Stell die Abteilungen so, wie du durch deinen Laden gehst. Die Liste sortiert sich danach.</p>
+    <ul id="orderList"></ul>
   </div>
 </div>
 
@@ -144,7 +157,15 @@ ul{list-style:none;margin:0;padding:0;background:var(--surface);border:1px solid
   ];
   const MATCH = [CATS[8]].concat(CATS.slice(0, 8)); // Drogerie zuerst, damit "Zahnpasta" nicht bei Nudeln landet
   const catOf = t => (MATCH.find(([, r]) => r.test(t)) || ["Sonstiges"])[0];
-  const ORDER = CATS.map(c => c[0]).concat("Sonstiges");
+  const DEFAULT_ORDER = CATS.map(c => c[0]).concat("Sonstiges");
+  const LS_ORDER = "einkaufsliste.reihenfolge";
+  let ORDER = (() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(LS_ORDER));
+      if (Array.isArray(saved)) return saved.filter(c => DEFAULT_ORDER.includes(c)).concat(DEFAULT_ORDER.filter(c => !saved.includes(c)));
+    } catch {}
+    return DEFAULT_ORDER.slice();
+  })();
   const norm = t => t.toLowerCase().trim();
 
   // ---------- Speicher (auf diesem Handy) ----------
@@ -221,6 +242,29 @@ ul{list-style:none;margin:0;padding:0;background:var(--surface);border:1px solid
   });
   $("demo").addEventListener("click", () => addItems(parse("Ich brauche noch zwei Liter Milch, Tomaten, Nudeln und Klopapier")));
   $("clear").addEventListener("click", () => { $("clear").hidden = true; $("clearYes").hidden = false; });
+  // Reihenfolge der Abteilungen im Laden
+  function renderOrder(){
+    const ul = $("orderList"); ul.textContent = "";
+    ORDER.forEach((c, i) => {
+      const li = document.createElement("li");
+      const pos = document.createElement("span"); pos.className = "pos"; pos.textContent = i + 1;
+      const name = document.createElement("span"); name.className = "name"; name.textContent = c;
+      const up = document.createElement("button"); up.type = "button"; up.textContent = "↑"; up.disabled = i === 0; up.setAttribute("aria-label", c + " nach oben");
+      const down = document.createElement("button"); down.type = "button"; down.textContent = "↓"; down.disabled = i === ORDER.length - 1; down.setAttribute("aria-label", c + " nach unten");
+      up.addEventListener("click", () => moveCat(i, -1)); down.addEventListener("click", () => moveCat(i, 1));
+      li.append(pos, name, up, down); ul.append(li);
+    });
+  }
+  function moveCat(i, d){
+    [ORDER[i], ORDER[i + d]] = [ORDER[i + d], ORDER[i]];
+    try { localStorage.setItem(LS_ORDER, JSON.stringify(ORDER)); } catch {}
+    renderOrder(); render();
+  }
+  $("orderBtn").addEventListener("click", () => {
+    const p = $("orderPanel"); p.hidden = !p.hidden;
+    $("orderBtn").setAttribute("aria-expanded", String(!p.hidden));
+    if (!p.hidden) { renderOrder(); p.scrollIntoView({ behavior: "smooth", block: "start" }); }
+  });
   $("clearYes").addEventListener("click", () => remove(items.filter(i => i.done).map(i => i.id)));
 
   // Direkte Spracherkennung (Web Speech API), wenn der Browser sie erlaubt
