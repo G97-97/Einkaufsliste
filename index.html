@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#2f7d4f">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<title>Sprech-Einkaufsliste</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;700&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<style>
+/* Layout: one narrow column like a paper shopping slip; sticky input dock on top, list grouped by supermarket aisle */
+:root{
+  --bg:#f5f7f2; --surface:#ffffff; --ink:#1b2420; --muted:#5f6b64; --line:#dde3da;
+  --accent:#2f7d4f; --accent-ink:#ffffff; --accent-soft:#e3f0e7; --rec:#c8432f;
+  --display:"Familjen Grotesk",ui-sans-serif,system-ui,sans-serif;
+  --body:"Atkinson Hyperlegible",ui-sans-serif,system-ui,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#121815; --surface:#1a221e; --ink:#e7ede8; --muted:#9aa79f; --line:#2b3530;
+  --accent:#5cbf84; --accent-ink:#0d1a12; --accent-soft:#1f3328; --rec:#ef6b56; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#121815; --surface:#1a221e; --ink:#e7ede8; --muted:#9aa79f; --line:#2b3530;
+  --accent:#5cbf84; --accent-ink:#0d1a12; --accent-soft:#1f3328; --rec:#ef6b56; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{min-height:100%}
+body{background:var(--bg);color:var(--ink);font:16px/1.5 var(--body);padding:0 16px 48px}
+.wrap{max-width:560px;margin:0 auto}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding-block:20px 8px}
+h1{font:700 1.6rem/1.1 var(--display);margin:0;letter-spacing:-.01em;text-wrap:balance}
+.count{color:var(--muted);font-size:.9rem;font-variant-numeric:tabular-nums;white-space:nowrap}
+.dock{position:sticky;top:env(safe-area-inset-top,0px);z-index:2;background:var(--bg);padding-block:8px 12px}
+form{display:flex;gap:8px}
+#eingabe{flex:1;min-width:0;font:inherit;font-size:1.05rem;padding:14px 14px;border:2px solid var(--line);border-radius:14px;background:var(--surface);color:var(--ink)}
+#eingabe:focus{outline:none;border-color:var(--accent)}
+.btn{font:700 1rem var(--display);border:0;border-radius:14px;padding:0 16px;min-height:52px;cursor:pointer;background:var(--accent);color:var(--accent-ink)}
+.btn:focus-visible,.ghost:focus-visible,.item button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.mic{width:52px;padding:0;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent)}
+.mic svg{width:24px;height:24px}
+.mic.on{background:var(--rec);color:#fff;animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{50%{transform:scale(1.06)}}
+@media (prefers-reduced-motion:reduce){.mic.on{animation:none}}
+.hint{margin:8px 2px 0;color:var(--muted);font-size:.88rem}
+.toast{margin:8px 2px 0;font-size:.92rem;color:var(--accent);font-weight:700;min-height:1.4em}
+.toast.err{color:var(--rec)}
+section{margin-top:18px}
+h2{font:700 .78rem var(--display);text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 6px 4px}
+ul{list-style:none;margin:0;padding:0;background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.item{display:flex;align-items:center;gap:12px;padding:12px 8px 12px 14px;border-top:1px solid var(--line)}
+.item:first-child{border-top:0}
+.item label{flex:1;min-width:0;display:flex;align-items:center;gap:12px;cursor:pointer;overflow-wrap:anywhere}
+.item input{width:22px;height:22px;accent-color:var(--accent);flex:none}
+.item.done .txt{text-decoration:line-through;color:var(--muted)}
+.item button{border:0;background:none;color:var(--muted);font-size:1.3rem;line-height:1;width:36px;height:36px;border-radius:10px;cursor:pointer;flex:none}
+.empty{background:var(--surface);border:1px dashed var(--line);border-radius:14px;padding:20px;margin-top:18px}
+.empty p{margin:0 0 10px}
+.empty q{font-style:italic}
+.ghost{font:700 .92rem var(--display);background:none;border:1.5px solid var(--line);color:var(--ink);border-radius:12px;padding:10px 14px;cursor:pointer}
+.foot{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:20px}
+.foot .note{color:var(--muted);font-size:.85rem}
+</style>
+</head>
+<body>
+
+
+<div class="wrap">
+  <header>
+    <h1>Sprech-Einkaufsliste</h1>
+    <span class="count" id="count"></span>
+  </header>
+
+  <div class="dock">
+    <form id="form" autocomplete="off">
+      <input id="eingabe" type="text" enterkeyhint="done" placeholder="z. B. Milch, 6 Eier und Brot" aria-label="Einträge sprechen oder tippen">
+      <button type="button" class="btn mic" id="mic" hidden aria-label="Spracheingabe starten">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3" fill="none"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+      </button>
+      <button type="submit" class="btn" id="add">Rein</button>
+    </form>
+    <p class="hint" id="hint">Grünen Mikrofon-Knopf drücken und alles in einem Satz sagen, z. B. „Milch, sechs Eier und Brot“. Komma oder „und“ trennen die Einträge.</p>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </div>
+
+  <div id="list"></div>
+
+  <div class="empty" id="empty" hidden>
+    <p><strong>Die Liste ist leer.</strong></p>
+    <p>Sag zum Beispiel <q>Ich brauche noch zwei Liter Milch, Tomaten, Nudeln und Klopapier</q>. Daraus werden vier Einträge, sortiert nach Abteilung.</p>
+    <button class="ghost" id="demo" type="button">Beispielsatz ausprobieren</button>
+  </div>
+
+  <div class="foot">
+    <button class="ghost" id="clear" type="button" hidden>Abgehakte entfernen</button>
+    <button class="ghost" id="clearYes" type="button" hidden>Ja, entfernen</button>
+    <span class="note" id="store"></span>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const input = $("eingabe"), toastEl = $("toast");
+
+  // ---------- Sprache zu Einträgen ----------
+  const NUM = {ein:1,eine:1,einen:1,einem:1,zwei:2,drei:3,vier:4,"fünf":5,sechs:6,sieben:7,acht:8,neun:9,zehn:10,elf:11,"zwölf":12,zwanzig:20,dreißig:30,halbes:"½",halbe:"½",halben:"½"};
+  const FILLER = [
+    /^(also|ähm|äh|ok|okay|und|dann|noch|bitte)\s+/i,
+    /^(ich|wir)\s+(brauche|brauchen|benötige|benötigen|hätte gern|hätten gern|möchte|möchten|muss|müssen)\s+(noch\s+)?/i,
+    /^(schreib|schreibe|setz|setze|pack|packe|füg|füge)\s+(noch\s+)?/i,
+    /^(es fehlt|es fehlen|uns fehlt|uns fehlen)\s+(noch\s+)?/i,
+    /\s+(auf die (einkaufs)?liste|zur (einkaufs)?liste|hinzu|dazu|kaufen|besorgen|holen|bitte|noch)$/i
+  ];
+  function cleanPart(s){
+    let t = s.trim().replace(/[.!?]+$/,"");
+    for (let i = 0; i < 3; i++) FILLER.forEach(r => t = t.replace(r, ""));
+    t = t.trim();
+    // Zahlwort am Anfang in Ziffer
+    t = t.replace(/^(\S+)\s+/, (m, w) => {
+      const n = NUM[w.toLowerCase()];
+      if (n === 1 && !/^(liter|kilo|kg|packung|packungen|dose|flasche|glas|bund|netz|tüte|becher|stück)/i.test(t.slice(m.length))) return "";
+      return n !== undefined ? n + " " : m;
+    });
+    t = t.replace(/\bkilo\b/i,"kg").replace(/\bgramm\b/i,"g");
+    return t ? t.charAt(0).toUpperCase() + t.slice(1) : "";
+  }
+  function parse(text){
+    return text
+      .split(/\s*(?:,|;|\n|\.\s|\bund\b|\bsowie\b|\bplus\b|\baußerdem\b|\bdann noch\b)\s*/i)
+      .map(cleanPart).filter(Boolean);
+  }
+
+  // ---------- Abteilungen ----------
+  const CATS = [
+    ["Obst & Gemüse", /apfel|äpfel|banane|birne|tomate|gurke|salat|zwiebel|knoblauch|kartoffel|karotte|möhre|paprika|zitrone|orange|beere|traube|avocado|pilz|champignon|zucchini|brokkoli|spinat|kräuter|petersilie|lauch|ingwer|obst|gemüse|kiwi|mango|melone|aubergine|kohl|radieschen|rucola/i],
+    ["Brot & Backwaren", /brot|brötchen|semmel|toast|baguette|croissant|breze|brezel|kuchen|weckerl|knäcke/i],
+    ["Kühlregal", /milch|joghurt|käse|butter|sahne|quark|ei\b|eier|schmand|mozzarella|frischkäse|wurst|schinken|aufschnitt|tofu|margarine|feta/i],
+    ["Fleisch & Fisch", /fleisch|hack|huhn|hähnchen|hühner|pute|steak|schnitzel|lachs|fisch|thunfisch|garnele|speck|würstel|bratwurst/i],
+    ["Vorrat", /nudel|pasta|spaghetti|reis|mehl|zucker|salz|pfeffer|öl|essig|dose|bohnen|linsen|haferflocken|müsli|cornflakes|honig|marmelade|nutella|ketchup|senf|mayo|soße|sauce|gewürz|brühe|tomatenmark|passata|kaffee|tee|kakao|backpulver|hefe/i],
+    ["Tiefkühl", /tiefkühl|tk |pizza|eis\b|pommes|spinat tk|fischstäbchen/i],
+    ["Getränke", /wasser|saft|bier|wein|cola|limo|sprudel|mineral|sekt|spezi/i],
+    ["Süßes & Snacks", /schoko|chips|keks|gummibär|süßigkeit|nüsse|riegel|popcorn|salzstangen/i],
+    ["Drogerie & Haushalt", /klopapier|toilettenpapier|küchenrolle|spülmittel|waschmittel|seife|shampoo|duschgel|zahnpasta|zahnbürste|deo|müllbeutel|schwamm|taschentücher|windel|creme|batterie|alufolie|frischhaltefolie|backpapier|reiniger/i]
+  ];
+  const MATCH = [CATS[8]].concat(CATS.slice(0, 8)); // Drogerie zuerst, damit "Zahnpasta" nicht bei Nudeln landet
+  const catOf = t => (MATCH.find(([, r]) => r.test(t)) || ["Sonstiges"])[0];
+  const ORDER = CATS.map(c => c[0]).concat("Sonstiges");
+  const norm = t => t.toLowerCase().trim();
+
+  // ---------- Speicher (auf diesem Handy) ----------
+  let items = [];   // {id, text, cat, done, ts}
+  let db = null;
+  const LS = "einkaufsliste.v1";
+  const lsLoad = () => { try { return JSON.parse(localStorage.getItem(LS)) || []; } catch { return []; } };
+  const lsSave = () => { try { localStorage.setItem(LS, JSON.stringify(items)); } catch {} };
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+  items = lsLoad();
+  $("store").textContent = "Die Liste wird auf diesem Handy gespeichert.";
+  render();
+
+
+  async function addItems(texts){
+    const open = new Set(items.filter(i => !i.done).map(i => norm(i.text)));
+    const fresh = [], dup = [];
+    for (const t of texts) (open.has(norm(t)) ? dup : fresh).push(t), open.add(norm(t));
+    const now = Date.now();
+    const rows = fresh.map((text, k) => ({ id: uid(), text, cat: catOf(text), done: false, ts: now + k }));
+    if (db) {
+      for (const r of rows) { const { id, ...body } = r; try { await db.collection("items").doc(id).set(body); } catch { toast("Speichern hat nicht geklappt. Bitte nochmal.", true); } }
+    } else { items = items.concat(rows); lsSave(); render(); }
+    let msg = rows.length ? `${rows.length} ${rows.length === 1 ? "Eintrag" : "Einträge"} hinzugefügt: ${fresh.join(", ")}` : "";
+    if (dup.length) msg += (msg ? ". " : "") + `Schon drauf: ${dup.join(", ")}`;
+    toast(msg || "Nichts erkannt. Versuch es nochmal.", !rows.length && !dup.length);
+  }
+  async function setDone(it, done){
+    if (db) { try { await db.collection("items").doc(it.id).update({ done }); } catch {} }
+    else { it.done = done; lsSave(); render(); }
+  }
+  async function remove(ids){
+    if (db) { for (const id of ids) { try { await db.collection("items").doc(id).delete(); } catch {} } }
+    else { items = items.filter(i => !ids.includes(i.id)); lsSave(); render(); }
+  }
+
+  // ---------- Anzeige ----------
+  function render(){
+    const list = $("list"); list.textContent = "";
+    const open = items.filter(i => !i.done).length, done = items.length - open;
+    $("count").textContent = items.length ? `${open} offen${done ? ` · ${done} erledigt` : ""}` : "";
+    $("empty").hidden = items.length > 0;
+    $("clear").hidden = !done; $("clearYes").hidden = true;
+    const groups = {};
+    items.forEach(i => (groups[i.done ? "Erledigt" : i.cat || "Sonstiges"] ||= []).push(i));
+    ORDER.concat("Erledigt").forEach(g => {
+      if (!groups[g]) return;
+      const sec = document.createElement("section");
+      const h = document.createElement("h2"); h.textContent = g; sec.append(h);
+      const ul = document.createElement("ul");
+      groups[g].sort((a, b) => a.ts - b.ts).forEach(it => {
+        const li = document.createElement("li"); li.className = "item" + (it.done ? " done" : "");
+        const lab = document.createElement("label");
+        const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = !!it.done; cb.id = "cb-" + it.id;
+        cb.addEventListener("change", () => setDone(it, cb.checked));
+        const sp = document.createElement("span"); sp.className = "txt"; sp.textContent = it.text;
+        lab.append(cb, sp);
+        const del = document.createElement("button"); del.type = "button"; del.textContent = "×"; del.setAttribute("aria-label", it.text + " löschen");
+        del.addEventListener("click", () => remove([it.id]));
+        li.append(lab, del); ul.append(li);
+      });
+      sec.append(ul); list.append(sec);
+    });
+  }
+  let tt;
+  function toast(msg, err){ toastEl.textContent = msg; toastEl.className = "toast" + (err ? " err" : ""); clearTimeout(tt); tt = setTimeout(() => toastEl.textContent = "", err ? 15000 : 6000); }
+
+  // ---------- Eingabe ----------
+  $("form").addEventListener("submit", e => {
+    e.preventDefault();
+    const v = input.value.trim(); if (!v) { input.focus(); return; }
+    addItems(parse(v)); input.value = "";
+  });
+  $("demo").addEventListener("click", () => addItems(parse("Ich brauche noch zwei Liter Milch, Tomaten, Nudeln und Klopapier")));
+  $("clear").addEventListener("click", () => { $("clear").hidden = true; $("clearYes").hidden = false; });
+  $("clearYes").addEventListener("click", () => remove(items.filter(i => i.done).map(i => i.id)));
+
+  // Direkte Spracherkennung (Web Speech API), wenn der Browser sie erlaubt
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (SR) {
+    const mic = $("mic"); mic.hidden = false;
+    let rec = null;
+    const listen = () => {
+      if (rec) { rec.stop(); return; }
+      rec = new SR(); rec.lang = "de-DE"; rec.interimResults = true; rec.continuous = false;
+      let finalText = "";
+      rec.onresult = e => {
+        let interim = "";
+        for (const r of e.results) r.isFinal ? (finalText = r[0].transcript) : (interim += r[0].transcript);
+        input.value = finalText || interim;
+      };
+      rec.onerror = e => {
+        if (e.error === "not-allowed" || e.error === "service-not-allowed")
+          toast("Das Mikrofon ist für diese App noch nicht erlaubt. Tipp in Chrome auf das Schloss-Symbol neben der Adresse und erlaube das Mikrofon. Bis dahin: ins Eingabefeld tippen, dann auf das Mikrofon-Symbol deiner Tastatur (iPhone: unten rechts, Android: oben rechts) und den Satz sprechen.", true), input.focus();
+        else if (e.error === "no-speech") toast("Nichts gehört. Tipp nochmal aufs Mikrofon.", true);
+      };
+      rec.onend = () => { mic.classList.remove("on"); mic.setAttribute("aria-label","Spracheingabe starten"); rec = null; if (finalText) { addItems(parse(finalText)); input.value = ""; } };
+      mic.classList.add("on"); mic.setAttribute("aria-label","Spracheingabe stoppen");
+      try { rec.start(); } catch { mic.classList.remove("on"); rec = null; }
+    };
+    mic.addEventListener("click", listen);
+    // App-Verknüpfung "Sprechen" (langes Drücken aufs App-Symbol) startet direkt das Zuhören
+    if (location.hash === "#sprechen") { history.replaceState(null, "", location.pathname); listen(); }
+  } else if (location.hash === "#sprechen") input.focus();
+
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+})();
+</script>
+
+</body>
+</html>
